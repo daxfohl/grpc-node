@@ -50,7 +50,7 @@ function main() {
     user = 'world';
   }
   client.sayHello({name: user}, function(err, response) {
-    console.log('Greeting:', response.message);
+    console.log('Greeting:', JSON.stringify(response));
   });
 }
 

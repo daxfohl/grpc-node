@@ -33,40 +33,52 @@ var packageDefinition = protoLoader.loadSync(
 var hello_proto = grpc.loadPackageDefinition(packageDefinition).helloworld;
 
 /**
- * Implements the SayHello RPC method.
- */
-function sayHello(call, callback) {
-  callback(null, {message: 'Hello ' + call.request.name + ' from ' + call.call.handler.path});
-}
-
-/**
  * Starts an RPC server that receives requests for the Greeter service at the
  * sample server port
  */
 function main() {
-  var server = new grpc.Server();
-  server.addService(hello_proto.Greeter.service, {sayHello: sayHello});
-  server.bindAsync('0.0.0.0:50051', grpc.ServerCredentials.createInsecure(), () => {
-    server.start();
-  });
-  var httpServer = http.createServer(function (req, res) {
+  wsClients = [];
+  const httpServer = http.createServer(function (req, res) {
     res.writeHead(200, {'Content-Type': 'text/html'});
     res.end(index());
   });
-  const wss = new ws.WebSocketServer({ server: httpServer });
+  const wss = new ws.WebSocketServer({ server: httpServer, clientTracking: true });
+  const grpcServer = new grpc.Server();
+  grpcServer.addService(hello_proto.Greeter.service, {sayHello: (call, callback) => {
+    console.log('sayhello');
+    if (wsClients.length == 0) {
+      callback(null, {message: 'Hello ' + call.request.name + ' from ' + call.call.handler.path});
+      console.log('saidhello');
+    } else {
+      const ws = wsClients[0];
+      console.log(JSON.stringify(wss.clients));
+      console.log('sending to chrome');
+      ws.send(JSON.stringify(call));
+      console.log('sent to chrome');
+      ws.addEventListener('message', (ev) => {
+        console.log('from listener');
+        console.log(ev.data);
+        callback(null, {message: 'Hello ' + call.request.name + ' from ' + call.call.handler.path});
+        console.log('saidhello');
+      }, {once: true});
+      console.log('saying hello');
+    }
+  }});
+  grpcServer.bindAsync('0.0.0.0:50051', grpc.ServerCredentials.createInsecure(), () => {
+    grpcServer.start();
+  });
 
   wss.on('connection', function connection(ws) {
+    wsClients.push(ws);
     ws.on('error', console.error);
-  
-    ws.on('message', function message(data) {
-      console.log('received: %s', data);
+    ws.on('close', () => {
+      console.log('closing ');
+      const i = wsClients.indexOf(ws);
+      console.log('closing ' + i);
+      wsClients.splice(i, 1);
     });
-  
-    ws.send('something');
   });
-  
   httpServer.listen(8080);
-  
 }
 
 main();
@@ -83,18 +95,24 @@ function index() {
     </form>
     <div id="messages"></div>
     <script>
-      const webSocket = new WebSocket('ws://localhost:8080/');
-      webSocket.onmessage = (event) => {
-        console.log(event)
-        document.getElementById('messages').innerHTML += 
-          'Message from server: ' + event.data + "<br>";
+      const ws = new WebSocket('ws://localhost:8080/');
+      ws.onmessage = (event) => {
+        console.log(event);
+        document.getElementById('messages').innerHTML += 'Message from server: ' + event.data + "<br>";
+        var o = JSON.parse(event.data);
+        console.log(o);
+        if (o.call.handler.path == '/helloworld.Greeter/SayHello') {
+          console.log('sending back');
+          ws.send(o.request.name + ' intercepted');
+          console.log('sent back');
+        }
       };
-      webSocket.addEventListener("open", () => {
+      ws.addEventListener("open", () => {
         console.log("We are connected");
       });
       function sendMessage(event) {
         var inputMessage = document.getElementById('message')
-        webSocket.send(inputMessage.value)
+        ws.send(inputMessage.value)
         inputMessage.value = ""
         event.preventDefault();
       }
