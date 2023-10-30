@@ -8,6 +8,7 @@
     "@grpc/grpc-js": "^1.8.0",
     "@grpc/grpc-js-xds": "^1.8.0",
     "lodash": "^4.6.1",
-    "minimist": "^1.2.0"
+    "minimist": "^1.2.0",
+    "ws": "^8.14.2"
   }
 }
